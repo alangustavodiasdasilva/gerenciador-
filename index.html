@@ -181,33 +181,42 @@
         <nav>
             <ul class="space-y-2">
                 <li>
-                    <button onclick="scrollToStage('ideation')" class="w-full flex items-center space-x-2 p-2 rounded-lg hover:bg-red-500/10 transition-colors">
+                    <button onclick="filterByCategory('ideation')" class="w-full flex items-center space-x-2 p-2 rounded-lg hover:bg-red-500/10 transition-colors">
                         <span class="text-sm">Ideação</span>
                     </button>
                 </li>
                 <li>
-                    <button onclick="scrollToStage('planning')" class="w-full flex items-center space-x-2 p-2 rounded-lg hover:bg-red-500/10 transition-colors">
+                    <button onclick="filterByCategory('planning')" class="w-full flex items-center space-x-2 p-2 rounded-lg hover:bg-red-500/10 transition-colors">
                         <span class="text-sm">Planejamento</span>
                     </button>
                 </li>
                 <!-- Separador -->
                 <li><hr class="border-red-500/20 my-2"></li>
                 <li>
-                    <button onclick="scrollToStage('progress')" class="w-full flex items-center space-x-2 p-2 rounded-lg hover:bg-red-500/10 transition-colors">
+                    <button onclick="filterByCategory('progress')" class="w-full flex items-center space-x-2 p-2 rounded-lg hover:bg-red-500/10 transition-colors">
                         <span class="text-sm">Em Progresso</span>
                     </button>
                 </li>
                 <li>
-                    <button onclick="scrollToStage('review')" class="w-full flex items-center space-x-2 p-2 rounded-lg hover:bg-red-500/10 transition-colors">
+                    <button onclick="filterByCategory('review')" class="w-full flex items-center space-x-2 p-2 rounded-lg hover:bg-red-500/10 transition-colors">
                         <span class="text-sm">Revisão</span>
                     </button>
                 </li>
                 <!-- Separador -->
                 <li><hr class="border-red-500/20 my-2"></li>
                 <li>
-                    <button onclick="scrollToStage('completed')" class="w-full flex items-center space-x-2 p-2 rounded-lg hover:bg-red-500/10 transition-colors">
+                    <button onclick="filterByCategory('completed')" class="w-full flex items-center space-x-2 p-2 rounded-lg hover:bg-red-500/10 transition-colors">
                         <span class="text-sm">Concluídos</span>
                     </button>
+                </li>
+                <!-- Separador -->
+                <li><hr class="border-red-500/20 my-2"></li>
+                <!-- Colaboradores -->
+                <li>
+                    <span class="text-xs text-gray-400">Colaboradores</span>
+                    <ul id="collaboratorsList" class="mt-2 space-y-1">
+                        <!-- Lista de colaboradores será preenchida dinamicamente -->
+                    </ul>
                 </li>
             </ul>
         </nav>
@@ -349,6 +358,12 @@
                 <label class="block text-sm text-gray-400 mb-1">Descrição</label>
                 <textarea class="form-input" rows="3" required name="taskDescription"></textarea>
             </div>
+
+            <!-- Novo campo para Instruções -->
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Instruções</label>
+                <textarea class="form-input" rows="3" name="taskInstructions"></textarea>
+            </div>
             
             <div>
                 <label class="block text-sm text-gray-400 mb-1">Projeto</label>
@@ -368,12 +383,12 @@
             </div>
 
             <div>
-                <label class="block text-sm text-gray-400 mb-1">Membros</label>
-                <div id="taskMembers" class="space-y-2">
-                    <!-- Task members added here dynamically -->
+                <label class="block text-sm text-gray-400 mb-1">Colaboradores</label>
+                <div id="taskCollaborators" class="space-y-2">
+                    <!-- Colaboradores serão adicionados aqui dinamicamente -->
                 </div>
-                <button type="button" onclick="addTaskMember()" class="text-red-500 hover:text-red-400 mt-2">
-                    + Adicionar Membro
+                <button type="button" onclick="addTaskCollaborator()" class="text-red-500 hover:text-red-400 mt-2">
+                    + Adicionar Colaborador
                 </button>
             </div>
             
@@ -456,6 +471,20 @@
         </form>
     </dialog>
 
+    <!-- Task Instructions Modal -->
+    <dialog id="taskInstructionsModal" class="modal">
+        <div class="space-y-4">
+            <h3 class="text-xl font-bold text-red-500 mb-4">Instruções da Tarefa</h3>
+            <p id="taskInstructionsContent" class="text-gray-300"></p>
+            <div class="flex justify-end">
+                <button type="button" onclick="closeModal('taskInstructionsModal')" 
+                    class="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </dialog>
+
     <!-- Scripts -->
     <script>
         // Estado do sistema
@@ -463,7 +492,9 @@
             projects: [],
             teams: [],
             members: [],
-            filteredProjects: []
+            collaborators: [],
+            filteredProjects: [],
+            currentCollaborator: null // Novo estado para o colaborador selecionado
         };
 
         // Funções de UI
@@ -476,7 +507,7 @@
             const modal = document.getElementById(modalId);
             if (modalId === 'taskModal') {
                 updateTaskProjectSelect();
-                initTaskMembers();
+                initTaskCollaborators(); // Atualizado
             } else if (modalId === 'teamModal') {
                 initTeamMembers();
             } else if (modalId === 'projectModal') {
@@ -491,16 +522,52 @@
             modal.close();
         }
 
-        function scrollToStage(stageId) {
-            const stageElement = document.getElementById(stageId + 'Stage');
-            if (stageElement) {
-                stageElement.scrollIntoView({ behavior: 'smooth' });
-            }
-        }
-
         function filterProjects() {
             const query = document.getElementById('searchInput').value.toLowerCase();
             state.filteredProjects = state.projects.filter(project => project.name.toLowerCase().includes(query));
+            renderProjects();
+        }
+
+        // Função para filtrar por categoria
+        function filterByCategory(category) {
+            // Seleciona todas as seções dentro de 'projectStages'
+            const projectStages = document.getElementById('projectStages');
+            const stageSections = projectStages.children;
+
+            // Seleciona a seção de projetos concluídos
+            const completedStage = document.getElementById('completedStage');
+
+            // Oculta todas as seções de etapas
+            for (let section of stageSections) {
+                section.style.display = 'none';
+            }
+
+            // Oculta a seção de concluídos
+            if (completedStage) {
+                completedStage.style.display = 'none';
+            }
+
+            // Exibe a seção correspondente à categoria selecionada
+            if (category === 'completed') {
+                if (completedStage) {
+                    completedStage.style.display = 'block';
+                }
+            } else {
+                const stageId = category + 'Stage';
+                const selectedStage = document.getElementById(stageId);
+                if (selectedStage) {
+                    selectedStage.style.display = 'block';
+                }
+            }
+
+            // Resetar colaborador atual
+            state.currentCollaborator = null;
+            renderCollaboratorsList();
+        }
+
+        // Função para filtrar por colaborador
+        function filterByCollaborator(collaboratorName) {
+            state.currentCollaborator = collaboratorName;
             renderProjects();
         }
 
@@ -550,9 +617,10 @@
             const projectId = parseInt(form.taskProject.value);
             const taskName = form.taskName.value.trim();
             const taskDescription = form.taskDescription.value.trim();
+            const taskInstructions = form.taskInstructions.value.trim(); // Novo campo
             const taskStartDate = form.taskStartDate.value;
             const taskEndDate = form.taskEndDate.value;
-            const taskMembers = Array.from(form.querySelectorAll('#taskMembers input')).map(input => input.value);
+            const taskCollaborators = Array.from(form.querySelectorAll('#taskCollaborators select')).map(select => select.value);
     
             if (!projectId || !taskName || !taskDescription || !taskStartDate || !taskEndDate) {
                 alert('Por favor, preencha todos os campos.');
@@ -566,17 +634,27 @@
                     id: Date.now(),
                     name: sanitizeHTML(taskName),
                     description: sanitizeHTML(taskDescription),
+                    instructions: sanitizeHTML(taskInstructions), // Armazenando as instruções
                     completed: false,
+                    started: false, // Nova propriedade
                     createdAt: new Date(),
                     startDate: taskStartDate,
                     endDate: taskEndDate,
-                    members: taskMembers,
+                    collaborators: taskCollaborators,
                     comments: []
                 };
     
                 project.tasks.push(newTask);
                 project.totalTasks++;
                 renderProjects();
+
+                // Adicionar colaboradores ao estado geral
+                taskCollaborators.forEach(name => {
+                    if (!state.collaborators.includes(name)) {
+                        state.collaborators.push(name);
+                    }
+                });
+                renderCollaboratorsList();
             } else {
                 alert('Projeto não encontrado.');
             }
@@ -621,14 +699,44 @@
                 const stages = ['ideation', 'planning', 'progress', 'review', 'completed'];
                 const currentIndex = stages.indexOf(project.status);
                 if (currentIndex < stages.length - 1) {
-                    project.status = stages[currentIndex + 1];
-                    if (project.status === 'completed') {
-                        project.completedAt = new Date();
-                        renderCompletedProjects();
+                    const nextStage = stages[currentIndex + 1];
+                    if (nextStage === 'completed') {
+                        // Gera um relatório antes de concluir o projeto
+                        generateCompletionReport(project);
+                    } else {
+                        project.status = nextStage;
+                        renderProjects();
                     }
+                }
+            }
+        }
+
+        // Função para mover para a etapa anterior
+        function moveToPreviousStage(projectId) {
+            const project = state.projects.find(p => p.id === projectId);
+            if (project) {
+                const stages = ['ideation', 'planning', 'progress', 'review', 'completed'];
+                const currentIndex = stages.indexOf(project.status);
+                if (currentIndex > 0) {
+                    project.status = stages[currentIndex - 1];
                     renderProjects();
                 }
             }
+        }
+
+        // Função para gerar relatório antes de concluir o projeto
+        function generateCompletionReport(project) {
+            // Implemente a lógica de geração de relatório aqui
+            // Por exemplo, abrir um modal com o resumo do projeto
+
+            // Exemplo simples usando alert (substitua por um modal se preferir)
+            alert(`Gerando relatório para o projeto "${project.name}".\nResumo:\n- Descrição: ${project.description}\n- Total de Tarefas: ${project.totalTasks}\n- Tarefas Concluídas: ${project.completedTasks}`);
+
+            // Após gerar o relatório, conclui o projeto
+            project.status = 'completed';
+            project.completedAt = new Date();
+            renderProjects();
+            renderCompletedProjects();
         }
 
         // Renderização de Projetos por Etapas
@@ -645,7 +753,14 @@
             container.innerHTML = '';
 
             stages.forEach(stage => {
-                const stageProjects = (state.filteredProjects || state.projects).filter(project => project.status === stage);
+                let stageProjects = (state.filteredProjects || state.projects).filter(project => project.status === stage);
+
+                // Filtrar projetos e tarefas por colaborador, se um colaborador estiver selecionado
+                if (state.currentCollaborator) {
+                    stageProjects = stageProjects.filter(project => 
+                        project.tasks.some(task => task.collaborators.includes(state.currentCollaborator))
+                    );
+                }
 
                 if (stageProjects.length > 0) {
                     const section = document.createElement('div');
@@ -666,6 +781,16 @@
                             <div class="flex justify-between items-center">
                                 <h3 class="font-bold text-red-500">${project.name}</h3>
                                 <div class="flex items-center space-x-2">
+                                    <!-- Botão para mover para a etapa anterior -->
+                                    <button onclick="moveToPreviousStage(${project.id})" 
+                                        class="text-blue-500 hover:text-blue-400" aria-label="Mover para Etapa Anterior">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" 
+                                             viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                                  d="M15 19l-7-7 7-7"/>
+                                        </svg>
+                                    </button>
+                                    <!-- Botão para mover para a próxima etapa -->
                                     <button onclick="moveToNextStage(${project.id})" 
                                         class="text-blue-500 hover:text-blue-400" aria-label="Mover para Próxima Etapa">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" 
@@ -687,7 +812,13 @@
                             <p class="text-gray-400 text-xs">Início: ${project.startDate} | Término: ${project.endDate}</p>
                             <p class="text-gray-400 text-xs">Membros: ${project.members.join(', ')}</p>
                             <div class="space-y-2">
-                                ${project.tasks.map(task => `
+                                ${project.tasks.filter(task => {
+                                    // Filtrar tarefas pelo colaborador selecionado
+                                    if (state.currentCollaborator) {
+                                        return task.collaborators.includes(state.currentCollaborator);
+                                    }
+                                    return true;
+                                }).map(task => `
                                     <div class="flex items-center justify-between p-2 bg-black/20 rounded-lg">
                                         <div class="flex items-center space-x-2">
                                             <input type="checkbox" 
@@ -695,6 +826,20 @@
                                                 onchange="toggleTaskStatus(${project.id}, ${task.id})"
                                                 class="checkbox">
                                             <span class="${task.completed ? 'line-through text-gray-500' : ''}">${task.name}</span>
+                                            ${task.instructions ? `
+                                            <button onclick="viewTaskInstructions(${project.id}, ${task.id})" class="text-blue-500 hover:text-blue-400 ml-2">
+                                                Ver Instruções
+                                            </button>` : ''}
+                                        </div>
+                                        <div class="flex items-center space-x-2">
+                                            ${!task.started ? `
+                                            <button onclick="startTask(${project.id}, ${task.id})" class="text-green-500 hover:text-green-400">
+                                                Iniciar Tarefa
+                                            </button>
+                                            ` : `
+                                            <span class="text-xs text-green-500">Em andamento</span>
+                                            `}
+                                            <span class="text-xs text-gray-400">${getTimeRemaining(task.endDate)}</span>
                                         </div>
                                     </div>
                                 `).join('')}
@@ -715,6 +860,45 @@
                     container.appendChild(section);
                 }
             });
+        }
+
+        // Função para exibir instruções da tarefa
+        function viewTaskInstructions(projectId, taskId) {
+            const project = state.projects.find(p => p.id === projectId);
+            if (!project) return;
+            const task = project.tasks.find(t => t.id === taskId);
+            if (task && task.instructions) {
+                const modal = document.getElementById('taskInstructionsModal');
+                const content = document.getElementById('taskInstructionsContent');
+                content.textContent = task.instructions;
+                modal.showModal();
+            } else {
+                alert('Esta tarefa não possui instruções.');
+            }
+        }
+
+        // Função para iniciar a tarefa
+        function startTask(projectId, taskId) {
+            const project = state.projects.find(p => p.id === projectId);
+            if (!project) return;
+
+            const task = project.tasks.find(t => t.id === taskId);
+            if (task && !task.started) {
+                task.started = true;
+                renderProjects();
+            }
+        }
+
+        // Função para calcular o tempo restante
+        function getTimeRemaining(endDate) {
+            const total = Date.parse(endDate) - Date.now();
+            if (total <= 0) {
+                return 'Tempo esgotado';
+            }
+            const days = Math.floor(total / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((total / (1000 * 60 * 60)) % 24);
+            const minutes = Math.floor((total / (1000 * 60)) % 60);
+            return `${days}d ${hours}h ${minutes}m restantes`;
         }
 
         // Renderização de Projetos Concluídos
@@ -804,20 +988,23 @@
             membersContainer.appendChild(newMember);
         }
 
-        function initTaskMembers() {
-            const membersContainer = document.getElementById('taskMembers');
-            membersContainer.innerHTML = '';
-            addTaskMember();
+        function initTaskCollaborators() {
+            const collaboratorsContainer = document.getElementById('taskCollaborators');
+            collaboratorsContainer.innerHTML = '';
+            addTaskCollaborator();
         }
 
-        function addTaskMember() {
-            const membersContainer = document.getElementById('taskMembers');
-            const newMember = document.createElement('div');
-            newMember.classList.add('flex', 'items-center', 'justify-between', 'p-2', 'bg-black/20', 'rounded-lg');
-            newMember.innerHTML = `
+        function addTaskCollaborator() {
+            const collaboratorsContainer = document.getElementById('taskCollaborators');
+            const newCollaborator = document.createElement('div');
+            newCollaborator.classList.add('flex', 'items-center', 'justify-between', 'p-2', 'bg-black/20', 'rounded-lg');
+            newCollaborator.innerHTML = `
                 <div class="flex items-center space-x-2">
-                    <div class="w-8 h-8 bg-red-500/20 rounded-full"></div>
-                    <input type="text" class="form-input" placeholder="Nome do Membro" required>
+                    <select class="form-input">
+                        ${state.collaborators.map(name => `
+                            <option value="${name}">${name}</option>
+                        `).join('')}
+                    </select>
                 </div>
                 <button type="button" onclick="removeMember(this)" class="text-red-500 hover:text-red-400">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" 
@@ -827,7 +1014,7 @@
                     </svg>
                 </button>
             `;
-            membersContainer.appendChild(newMember);
+            collaboratorsContainer.appendChild(newCollaborator);
         }
 
         function removeMember(button) {
@@ -844,9 +1031,32 @@
                 members: Array.from(form.querySelectorAll('#teamMembers input')).map(input => input.value)
             };
 
+            // Adicionar membros ao estado de colaboradores
+            newTeam.members.forEach(name => {
+                if (!state.collaborators.includes(name)) {
+                    state.collaborators.push(name);
+                }
+            });
+            renderCollaboratorsList();
+
             state.teams.push(newTeam);
             closeModal('teamModal');
             form.reset();
+        }
+
+        // Renderizar lista de colaboradores no menu lateral
+        function renderCollaboratorsList() {
+            const list = document.getElementById('collaboratorsList');
+            list.innerHTML = '';
+            state.collaborators.forEach(name => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <button onclick="filterByCollaborator('${name}')" class="w-full text-left px-2 py-1 rounded-lg hover:bg-red-500/10 transition-colors">
+                        <span class="text-sm">${name}</span>
+                    </button>
+                `;
+                list.appendChild(li);
+            });
         }
 
         // Funções de Relatório
@@ -878,6 +1088,14 @@
             state.filteredProjects = state.projects;
             renderProjects();
             renderCompletedProjects();
+
+            // Exibe inicialmente apenas a categoria 'Planejamento'
+            filterByCategory('planning');
+
+            // Atualiza o temporizador a cada minuto
+            setInterval(() => {
+                renderProjects();
+            }, 60000); // 60000 milissegundos = 1 minuto
 
             // Fechar menu ao clicar fora
             document.addEventListener('click', (e) => {
